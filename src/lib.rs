@@ -2,6 +2,7 @@ pub mod appinfo;
 pub mod events;
 pub mod launch;
 mod state;
+pub mod ui;
 
 use state::GraphicsState;
 use std::sync::Arc;
@@ -12,6 +13,8 @@ use wasm_bindgen::UnwrapThrowExt;
 use winit::event_loop::EventLoop;
 #[cfg(target_family = "wasm")]
 use winit::platform::web::WindowAttributesExtWebSys;
+#[cfg(target_os = "windows")]
+use winit::platform::windows::{Color, CornerPreference, WindowAttributesExtWindows};
 use winit::{application::ApplicationHandler, event_loop, window::Window};
 use winit::{
     dpi::LogicalSize,
@@ -45,7 +48,17 @@ impl App {
     }*/
 
     fn get_window_attributes(default_attributes: WindowAttributes) -> WindowAttributes {
-        default_attributes.with_inner_size(LogicalSize::new(1280, 720))
+        let mut attributes = default_attributes.with_inner_size(LogicalSize::new(1280, 720));
+
+        #[cfg(target_os = "windows")]
+        {
+            attributes = attributes
+                .with_corner_preference(CornerPreference::Round)
+                .with_resizable(true)
+                .with_decorations(false);
+        }
+
+        attributes
     }
 
     #[cfg(target_family = "wasm")]

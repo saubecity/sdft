@@ -134,7 +134,7 @@ impl GraphicsState {
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &view,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::RED),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                         store: wgpu::StoreOp::Store,
                     },
                     depth_slice: None,
@@ -238,7 +238,10 @@ impl GraphicsState {
             usage: TextureUsages::RENDER_ATTACHMENT,
             width: window_size.width,
             height: window_size.height,
-            alpha_mode: Self::pick_alpha_mode(surface_caps, None),
+            alpha_mode: Self::pick_alpha_mode(
+                surface_caps,
+                Some(CompositeAlphaMode::PreMultiplied),
+            ),
             present_mode: Self::pick_present_mode(surface_caps, None),
             color_space: Self::pick_color_space(prefer_hdr, format, surface_caps),
             desired_maximum_frame_latency: 2,
