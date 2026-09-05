@@ -4,8 +4,8 @@ use wgpu::wgt::TextureViewDescriptor;
 use std::any;
 use std::sync::Arc;
 use wgpu::{
-    Backends, CommandEncoderDescriptor, CurrentSurfaceTexture, RenderPassColorAttachment,
-    SurfaceTexture,
+    Adapter, BackendOptions, Backends, CommandEncoderDescriptor, CurrentSurfaceTexture, Features,
+    RenderPassColorAttachment, SurfaceTexture,
 };
 use wgpu::{
     CompositeAlphaMode, Device, InstanceDescriptor, Limits, Surface, SurfaceCapabilities,
@@ -38,15 +38,21 @@ impl Default for GraphicsPreferences {
     }
 }
 
+struct GraphicsCaps {
+    downlevel: wgpu::DownlevelCapabilities,
+    features: wgpu::Features,
+}
+
 pub struct GraphicsState {
     surface: wgpu::Surface<'static>,
     instance: wgpu::Instance,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     device: wgpu::Device,
-    downlevel: wgpu::DownlevelCapabilities,
     pref: GraphicsPreferences,
     is_surface_configured: bool,
+    pipeline_cache: Option<wgpu::PipelineCache>,
+    caps: GraphicsCaps,
 }
 
 impl GraphicsState {
@@ -74,7 +80,6 @@ impl GraphicsState {
             .await
             .context("Could not pick adapter")?;
 
-        let downlevel = adapter.get_downlevel_capabilities();
         let adapter_info = adapter.get_info();
 
         log::info!(
@@ -86,14 +91,21 @@ impl GraphicsState {
         let device_desc = wgpu::DeviceDescriptor {
             label: Some("msdftext - GPU"),
             required_limits: Limits::downlevel_webgl2_defaults(),
+            required_features: Self::get_required_features(&adapter.features()),
             ..Default::default()
         };
 
         let (device, queue) = adapter.request_device(&device_desc).await?;
 
+        let caps = GraphicsCaps {
+            downlevel: adapter.get_downlevel_capabilities(),
+            features: device.features(),
+        };
+
         let surface_caps = surface.get_capabilities(&adapter);
         let size = window.inner_size();
         let config = Self::create_surface_config(pref.hdr, &surface_caps, &size);
+        let pipeline_cache = Self::create_pipeline_cache(&device, None);
         let is_surface_configured = Self::configure_surface_impl(&surface, &config, &device);
 
         Ok(Self {
@@ -102,9 +114,10 @@ impl GraphicsState {
             queue,
             config,
             device,
-            downlevel,
+            caps,
             pref,
             is_surface_configured,
+            pipeline_cache,
         })
     }
 
@@ -173,6 +186,33 @@ impl GraphicsState {
                 return None;
             }
             _ => None,
+        }
+    }
+
+    // bad
+    fn get_required_features(adapter_features: &Features) -> Features {
+        let mut features = Features::default();
+
+        if adapter_features.contains(Features::PIPELINE_CACHE) {
+            features.insert(Features::PIPELINE_CACHE);
+        }
+
+        features
+    }
+
+    fn create_pipeline_cache(device: &Device, data: Option<&[u8]>) -> Option<wgpu::PipelineCache> {
+        if !device.features().contains(Features::PIPELINE_CACHE) {
+            return None;
+        }
+
+        unsafe {
+            Some(
+                device.create_pipeline_cache(&wgpu::PipelineCacheDescriptor {
+                    label: Some("pipeline cache"),
+                    data,
+                    fallback: true,
+                }),
+            )
         }
     }
 

@@ -1,4 +1,10 @@
-use wgpu::{BindGroupDescriptor, BindGroupLayout, BindGroupLayoutEntry, PipelineLayout, RenderPipeline, ShaderModule, ShaderModuleDescriptor, ShaderStages};
+use std::default;
+
+use wgpu::{
+    BindGroupDescriptor, BindGroupLayout, BindGroupLayoutEntry, Device, PipelineCache,
+    PipelineCompilationOptions, PipelineLayout, RenderPipeline, ShaderModule,
+    ShaderModuleDescriptor, ShaderStages, SurfaceConfiguration,
+};
 
 use crate::ui::{Color, Position, Rect};
 
@@ -9,49 +15,84 @@ pub struct Rectangle {
 
 pub struct Renderer {
     pipeline: RenderPipeline,
-    bind_group_layout: wgpu::BindGroupLayout,
-    bind_group: Option<wgpu::BindGroup>,
+    //bind_group_layout: wgpu::BindGroupLayout,
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, bytemuck::Zeroable, bytemuck::Pod)]
 struct RectangleVB {
-    position: [f32; 4] /* x,y,h,w */,
-    color: [f32; 4] /* r,g,b,a */,
+    position: [f32; 4], /* x,y,h,w */
+    color: [f32; 4],    /* r,g,b,a */
 }
 
 impl Renderer {
-    fn init_shader_module(device: &wgpu::Device) -> ShaderModule {
+    fn create_shader_module(device: &wgpu::Device) -> ShaderModule {
         device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Rectangle shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("rectangle.wgsl").into()),
         })
     }
 
-    fn
+    fn create_pipeline(
+        device: &Device,
+        surface_config: &SurfaceConfiguration,
+        cache: PipelineCache,
+    ) -> RenderPipeline {
+        let shader = Self::create_shader_module(device);
 
-    pub fn new(device: &wgpu::Device) -> Self {
-        let shaders = Self::init_shader_module(device);
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Rectangle pipeline layout"),
+                bind_group_layouts: &[],
+                immediate_size: 0,
+            });
 
-
-        let bind_group_layouts = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("rectangle bind group layout"),
-                entries: &[BindGroupLayoutEntry {
-                    binding:0,
-                    visibility: Some(ShaderStages::VERTEX),
-                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: 0},
-                    count: None,
-                }]}
-        );
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("rectangle pipeline layout"),
-            bind_group_layouts: (), immediate_size: 0 });
-
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("rectangle primitive render"),
-                layout: (), vertex: (), primitive: (), depth_stencil: (), multisample: (), fragment: (), multiview_mask: (), cache: () })
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("rectangle render pipeline"),
+            vertex: wgpu::VertexState {
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+                module: &shader,
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                cull_mode: Some(wgpu::Face::Back),
+                front_face: wgpu::FrontFace::Ccw,
+                strip_index_format: None,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            layout: Some(&render_pipeline_layout),
+            cache: Some(&cache),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+        })
     }
 
+    pub fn new(
+        device: &wgpu::Device,
+        surface_config: &wgpu::SurfaceConfiguration,
+        pipeline_cache: PipelineCache,
+    ) -> Self {
+        let pipeline = Self::create_pipeline(device, surface_config, pipeline_cache);
 
+        Self { pipeline }
+    }
 }
